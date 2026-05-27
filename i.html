@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Invitation Goldo</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 20px; color: #1f2937; line-height: 1.5; text-align: center; }
+  h1 { font-size: 24px; color: #5d4226; }
+  p { color: #374151; }
+  .code { font-size: 30px; letter-spacing: 3px; font-weight: 800; color: #5d4226; background: #fff7ed; border: 2px solid #e8c674; border-radius: 12px; padding: 14px 18px; display: inline-block; margin: 18px 0; }
+  a.btn { display: inline-block; background: #e8c674; color: #5d4226; font-weight: 800; text-decoration: none; padding: 14px 22px; border-radius: 12px; margin-top: 8px; }
+  p.hint { color: #6b7280; font-size: 14px; margin-top: 22px; }
+  a { color: #b45309; }
+</style>
+</head>
+<body>
+  <h1>🐴 Tu as une invitation Goldo</h1>
+  <p>Si tu as déjà l'app, elle va s'ouvrir. Sinon, installe Goldo puis entre ce code :</p>
+  <div class="code" id="code">--------</div>
+  <p><a class="btn" id="install" href="https://apps.apple.com/app/goldo/id6766048314">Installer Goldo</a></p>
+  <p class="hint">Déjà installée&nbsp;? <a id="open" href="#">Ouvrir dans Goldo</a></p>
+<script>
+  (function () {
+    var m = location.search.match(/[?&]c=([^&#]+)/i);
+    var code = m ? decodeURIComponent(m[1]).replace(/[^A-Za-z0-9]/g, '').toUpperCase() : '';
+    if (code.length === 8) {
+      document.getElementById('code').textContent = code.slice(0, 4) + '-' + code.slice(4);
+      var deep = 'goldo://join?code=' + code;
+      document.getElementById('open').setAttribute('href', deep);
+      // Tente d'ouvrir l'app immédiatement (ne fait rien si non installée).
+      setTimeout(function () { window.location = deep; }, 50);
+    }
+  })();
+</script>
+</body>
+</html>

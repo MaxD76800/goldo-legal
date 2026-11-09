@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<meta name="referrer" content="no-referrer" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https://wykccrxycccycixfvwzz.supabase.co data:; connect-src https://wykccrxycccycixfvwzz.supabase.co; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" />
+<title>Rejoindre une écurie sur Goldo</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 20px; color: #1f2937; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
+  h1 { font-size: 24px; color: #5d4226; margin-bottom: 4px; }
+  p { color: #374151; }
+  .city { margin-top: 0; color: #6b7280; }
+  .photo { width: 96px; height: 96px; border-radius: 48px; object-fit: cover; margin: 8px auto 0; display: block; border: 2px solid #e8c674; }
+  .code { font-size: 30px; letter-spacing: 3px; font-weight: 700; color: #5d4226; background: #fff7ed; border: 2px solid #e8c674; border-radius: 12px; padding: 14px 18px; display: inline-block; margin: 18px 0 6px; }
+  a.btn { display: inline-block; background: #e8c674; color: #5d4226; font-weight: 700; text-decoration: none; padding: 14px 22px; border-radius: 12px; margin: 8px 4px 0; }
+  a.btn.second { background: #fff7ed; border: 2px solid #e8c674; padding: 12px 20px; }
+  p.hint { color: #6b7280; font-size: 14px; margin-top: 22px; }
+  p.note { color: #6b7280; font-size: 14px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <p><span aria-hidden="true">🐴</span></p>
+  <h1 id="title">Rejoindre une écurie sur Goldo</h1>
+  <p class="city" id="city" hidden></p>
+  <img class="photo" id="photo" alt="" hidden referrerpolicy="no-referrer" />
+  <p id="lead">Goldo suit ton cheval : box, passages, soins. Installe l’app, puis entre le code de l’écurie ou rescanne son QR code.</p>
+
+  <div id="codeBlock" hidden>
+    <div class="code" id="code" aria-label="Code de l’écurie"></div>
+  </div>
+
+  <p id="androidMsg" hidden>Goldo n’existe pour l’instant que sur iPhone. Ton écurie s’occupe de ton cheval, tu n’as rien à faire.</p>
+  <p id="desktopMsg" hidden>Sur ton iPhone, ouvre Goldo et entre ce code.</p>
+
+  <p id="buttons">
+    <a class="btn" id="open" href="#" hidden>Ouvrir dans Goldo</a>
+    <a class="btn second" id="install" href="https://apps.apple.com/app/goldo/id6766048314">Installer Goldo</a>
+  </p>
+  <p class="hint" id="afterInstall">Après installation, rescanne le QR ou entre le code.</p>
+  <p class="note" id="status" hidden></p>
+  <noscript><p class="note">Pour voir le nom de l’écurie, active JavaScript. Tu peux aussi installer Goldo puis rescanner le QR code de l’écurie.</p></noscript>
+
+<script>
+/* E-CORE-START : logique pure, sans DOM, testée par legal/e.test.mjs */
+var GOLDO_E = (function () {
+  var PROJECT_HOST = 'https://wykccrxycccycixfvwzz.supabase.co';
+  // Même alphabet que gen_stable_code côté serveur : ni I, O, 0 ni 1.
+  var CODE_RE = /^[A-HJ-NP-Z2-9]{8}$/;
+  var PHOTO_RE = /^[A-Za-z0-9][A-Za-z0-9._\-]*(\/[A-Za-z0-9][A-Za-z0-9._\-]*)*$/;
+
+  /** Code d’écurie ou d’invitation valable, en majuscules ; chaîne vide sinon. */
+  function parseCode(raw) {
+    if (typeof raw !== 'string') return '';
+    var c = raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    return CODE_RE.test(c) ? c : '';
+  }
+  function formatCode(code) { return code.slice(0, 4) + '-' + code.slice(4); }
+
+  /** Texte affichable : sans caractère de contrôle, espaces réduits, borné. */
+  function cleanText(raw, max) {
+    if (typeof raw !== 'string') return '';
+    var s = raw.replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿]/g, ' ').replace(/\s+/g, ' ').trim();
+    return s.length > max ? s.slice(0, max).trim() : s;
+  }
+
+  /** URL publique de la photo, uniquement dans le bucket stable-photos du projet ; chaîne vide sinon. */
+  function photoUrl(path) {
+    if (typeof path !== 'string' || path.length > 200) return '';
+    if (!PHOTO_RE.test(path) || path.indexOf('..') !== -1) return '';
+    return PROJECT_HOST + '/storage/v1/object/public/stable-photos/' + path.split('/').map(encodeURIComponent).join('/');
+  }
+
+  function platformOf(ua, maxTouchPoints) {
+    var u = typeof ua === 'string' ? ua : '';
+    if (/Android/i.test(u)) return 'android';
+    if (/iPhone|iPad|iPod/i.test(u)) return 'ios';
+    // iPadOS se présente comme un Mac, mais avec un écran tactile.
+    if (/Macintosh/i.test(u) && maxTouchPoints > 1) return 'ios';
+    return 'desktop';
+  }
+
+  function joinLink(code) { return 'goldo://join?code=' + code; }
+  function createLink(name) { return 'goldo://stable/create?name=' + encodeURIComponent(name); }
+
+  /** Lit ?c= / ?n= : { code } ou { name } ou {}. Le code prime. */
+  function readQuery(search) {
+    var p;
+    try { p = new URLSearchParams(search); } catch (e) { return {}; }
+    var code = parseCode(p.get('c') || '');
+    if (code) return { code: code };
+    var name = cleanText(p.get('n') || '', 60);
+    if (name) return { name: name };
+    return {};
+  }
+
+  /** Réponse de stable_public_preview : { name, city, photo } nettoyés, ou null si rien d’exploitable. */
+  function readPreview(json) {
+    var row = Array.isArray(json) ? json[0] : null;
+    if (!row || typeof row !== 'object') return null;
+    var name = cleanText(row.name, 80);
+    if (!name) return null;
+    return { name: name, city: cleanText(row.city, 60), photo: photoUrl(row.photo_path) };
+  }
+
+  return {
+    PROJECT_HOST: PROJECT_HOST, parseCode: parseCode, formatCode: formatCode, cleanText: cleanText,
+    photoUrl: photoUrl, platformOf: platformOf, joinLink: joinLink, createLink: createLink,
+    readQuery: readQuery, readPreview: readPreview
+  };
+})();
+/* E-CORE-END */
+
+(function () {
+  // Clé publique du projet (rôle anon), à renseigner à la publication de la page. Vide : l’aperçu n’est pas demandé,
+  // le code et les boutons s’affichent quand même.
+  var ANON_KEY = '';
+
+  function $(id) { return document.getElementById(id); }
+  function show(id, on) { $(id).hidden = !on; }
+  function text(id, value) { $(id).textContent = value; }
+
+  var q = GOLDO_E.readQuery(location.search);
+  var platform = GOLDO_E.platformOf(navigator.userAgent, navigator.maxTouchPoints || 0);
+
+  if (q.code) {
+    text('code', GOLDO_E.formatCode(q.code));
+    show('codeBlock', true);
+    text('lead', 'Ton écurie est sur Goldo. Installe l’app pour retrouver ton cheval, son box et les passages.');
+    if (platform === 'ios') {
+      // Jamais ouvert automatiquement : c’est la personne qui touche le bouton.
+      $('open').setAttribute('href', GOLDO_E.joinLink(q.code));
+      show('open', true);
+    } else if (platform === 'android') {
+      show('androidMsg', true);
+      show('codeBlock', false);
+      show('buttons', false);
+      show('afterInstall', false);
+    } else {
+      show('desktopMsg', true);
+      show('afterInstall', false);
+    }
+    loadPreview(q.code);
+  } else if (q.name) {
+    text('title', 'Crée ton écurie sur Goldo');
+    text('city', q.name);
+    show('city', true);
+    text('lead', 'Gère les boxes, le planning et les passages de ton écurie, gratuitement, depuis ton iPhone.');
+    if (platform === 'ios') {
+      $('open').setAttribute('href', GOLDO_E.createLink(q.name));
+      $('open').textContent = 'Créer mon écurie dans Goldo';
+      show('open', true);
+    } else if (platform === 'android') {
+      show('androidMsg', true);
+      show('buttons', false);
+    } else {
+      text('desktopMsg', 'Ouvre ce lien sur ton iPhone pour créer ton écurie.');
+      show('desktopMsg', true);
+    }
+    show('afterInstall', false);
+  } else {
+    text('lead', 'Ce lien est incomplet. Rescanne le QR code de ton écurie, ou entre son code dans Goldo.');
+    if (platform === 'android') {
+      show('androidMsg', true);
+      show('buttons', false);
+    }
+  }
+
+  function loadPreview(code) {
+    if (!ANON_KEY || typeof fetch !== 'function') return;
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 6000) : null;
+    fetch(GOLDO_E.PROJECT_HOST + '/rest/v1/rpc/stable_public_preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: ANON_KEY, Authorization: 'Bearer ' + ANON_KEY },
+      body: JSON.stringify({ p_code: code }),
+      referrerPolicy: 'no-referrer',
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function (r) {
+      if (!r.ok) throw new Error('http');
+      return r.json();
+    }).then(function (json) {
+      var p = GOLDO_E.readPreview(json);
+      if (!p) {
+        // Un lien personnel n’a pas d’aperçu public : message neutre, le code reste.
+        text('status', 'Si le code ne marche plus, demande le nouveau à l’écurie.');
+        show('status', true);
+        return;
+      }
+      text('title', p.name);
+      if (p.city) { text('city', p.city); show('city', true); }
+      if (p.photo && platform !== 'android') {
+        var img = $('photo');
+        img.onerror = function () { img.hidden = true; };
+        img.src = p.photo;
+        img.hidden = false;
+      }
+    }).catch(function () {
+      // Réseau coupé ou délai dépassé : rien ne disparaît, on le dit sobrement.
+      text('status', 'Les détails de l’écurie n’ont pas pu être chargés. Le code reste valable.');
+      show('status', true);
+    }).then(function () { if (timer) clearTimeout(timer); });
+  }
+})();
+</script>
+</body>
+</html>

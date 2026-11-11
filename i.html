@@ -3,35 +3,179 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<meta name="referrer" content="no-referrer" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" />
+<meta property="og:title" content="Goldo, le carnet de ton cheval" />
+<meta property="og:description" content="Lien d’invitation · code déjà rempli" />
+<meta property="og:type" content="website" />
 <title>Invitation Goldo</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 20px; color: #1f2937; line-height: 1.5; text-align: center; }
-  h1 { font-size: 24px; color: #5d4226; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 20px; color: #1f2937; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
+  h1 { font-size: 24px; color: #5d4226; margin-bottom: 4px; }
   p { color: #374151; }
-  .code { font-size: 30px; letter-spacing: 3px; font-weight: 800; color: #5d4226; background: #fff7ed; border: 2px solid #e8c674; border-radius: 12px; padding: 14px 18px; display: inline-block; margin: 18px 0; }
-  a.btn { display: inline-block; background: #e8c674; color: #5d4226; font-weight: 800; text-decoration: none; padding: 14px 22px; border-radius: 12px; margin-top: 8px; }
+  .code { font-size: 30px; letter-spacing: 3px; font-weight: 700; color: #5d4226; background: #fff7ed; border: 2px solid #e8c674; border-radius: 12px; padding: 14px 18px; display: inline-block; margin: 18px 0 6px; }
+  a.btn, button.btn { display: inline-block; background: #e8c674; color: #5d4226; font: inherit; font-weight: 700; text-decoration: none; padding: 14px 22px; border: 0; border-radius: 12px; margin: 8px 4px 0; cursor: pointer; }
+  a.btn.second, button.btn.second { background: #fff7ed; border: 2px solid #e8c674; padding: 12px 20px; }
+  button.link { background: none; border: 0; padding: 0; font: inherit; color: #b45309; text-decoration: underline; cursor: pointer; }
   p.hint { color: #6b7280; font-size: 14px; margin-top: 22px; }
+  p.note { color: #6b7280; font-size: 14px; }
   a { color: #b45309; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-  <h1>🐴 Tu as une invitation Goldo</h1>
-  <p>Si tu as déjà l'app, elle va s'ouvrir. Sinon, installe Goldo puis entre ce code :</p>
-  <div class="code" id="code">--------</div>
-  <p><a class="btn" id="install" href="https://apps.apple.com/app/goldo/id6766048314">Installer Goldo</a></p>
-  <p class="hint">Déjà installée&nbsp;? <a id="open" href="#">Ouvrir dans Goldo</a></p>
+  <p><span aria-hidden="true">🐴</span></p>
+  <h1 id="title">Tu as une invitation Goldo</h1>
+  <p id="lead">Goldo est le carnet de ton cheval : soins, séances, vaccins. Installe l’app pour commencer.</p>
+
+  <div id="codeBlock" hidden>
+    <div class="code" id="code" aria-label="Code d’invitation"></div>
+  </div>
+  <p class="note" id="copied" role="status" hidden>Code copié.</p>
+
+  <p id="androidMsg" hidden>Goldo n’existe pour l’instant que sur iPhone.</p>
+  <p id="desktopMsg" hidden>Ouvre ce lien sur ton iPhone, ou installe Goldo et entre ce code à l’inscription.</p>
+
+  <p id="buttons">
+    <a class="btn" id="install" href="https://apps.apple.com/fr/app/id6766048314">Installer Goldo</a>
+    <a class="btn second" id="open" href="#" hidden>J’ai déjà Goldo</a>
+  </p>
+  <p class="hint" id="hint" hidden></p>
+  <p class="hint" id="copyLine" hidden><button type="button" class="link" id="copy">Copier le code</button></p>
+
 <script>
-  (function () {
-    var m = location.search.match(/[?&]c=([^&#]+)/i);
-    var code = m ? decodeURIComponent(m[1]).replace(/[^A-Za-z0-9]/g, '').toUpperCase() : '';
-    if (code.length === 8) {
-      document.getElementById('code').textContent = code.slice(0, 4) + '-' + code.slice(4);
-      var deep = 'goldo://join?code=' + code;
-      document.getElementById('open').setAttribute('href', deep);
-      // Tente d'ouvrir l'app immédiatement (ne fait rien si non installée).
-      setTimeout(function () { window.location = deep; }, 50);
+/* I-CORE-START : logique pure, sans DOM, testée par app/src/features/rewards/referral/iPage.test.ts */
+var GOLDO_I = (function () {
+  var APP_STORE = 'https://apps.apple.com/fr/app/id6766048314';
+  // Parrainage : 3 lettres du prénom + 3 caractères (LEA-7K2), toute casse, avec ou sans tiret.
+  var REFERRAL_RE = /^[A-Z]{3}[A-Z0-9]{3}$/;
+  // Équipe : code de 8 caractères (lien de l’app `?c=`, inchangé).
+  var TEAM_RE = /^[A-Z0-9]{8}$/;
+
+  function clean(raw) {
+    return typeof raw === 'string' ? raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase() : '';
+  }
+  /** Code de parrainage valable (LEA7K2) ; chaîne vide sinon (que des lettres, chiffres, espaces et tirets). */
+  function parseReferral(raw) {
+    if (typeof raw !== 'string' || !/^[A-Za-z0-9\s\-]+$/.test(raw.trim())) return '';
+    var c = clean(raw);
+    return REFERRAL_RE.test(c) ? c : '';
+  }
+  /** Code d’équipe valable (8 caractères) ; chaîne vide sinon. */
+  function parseTeam(raw) {
+    var c = clean(raw);
+    return TEAM_RE.test(c) ? c : '';
+  }
+  function formatReferral(code) { return code.slice(0, 3) + '-' + code.slice(3); }
+  function formatTeam(code) { return code.slice(0, 4) + '-' + code.slice(4); }
+  function referralLink(code) { return 'goldo://parrain?code=' + code; }
+  function joinLink(code) { return 'goldo://join?code=' + code; }
+
+  function platformOf(ua, maxTouchPoints) {
+    var u = typeof ua === 'string' ? ua : '';
+    if (/Android/i.test(u)) return 'android';
+    if (/iPhone|iPad|iPod/i.test(u)) return 'ios';
+    // iPadOS se présente comme un Mac, mais avec un écran tactile.
+    if (/Macintosh/i.test(u) && maxTouchPoints > 1) return 'ios';
+    return 'desktop';
+  }
+
+  /** Lit ?r= (parrainage) / ?c= (équipe) : { referral } ou { team } ou {}. Le parrainage prime. */
+  function readQuery(search) {
+    var p;
+    try { p = new URLSearchParams(search); } catch (e) { return {}; }
+    var r = parseReferral(p.get('r') || '');
+    if (r) return { referral: r };
+    var t = parseTeam(p.get('c') || '');
+    if (t) return { team: t };
+    return {};
+  }
+
+  return {
+    APP_STORE: APP_STORE, parseReferral: parseReferral, parseTeam: parseTeam, formatReferral: formatReferral,
+    formatTeam: formatTeam, referralLink: referralLink, joinLink: joinLink, platformOf: platformOf, readQuery: readQuery
+  };
+})();
+/* I-CORE-END */
+
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function show(id, on) { $(id).hidden = !on; }
+  function text(id, value) { $(id).textContent = value; }
+
+  var q = GOLDO_I.readQuery(location.search);
+  var platform = GOLDO_I.platformOf(navigator.userAgent, navigator.maxTouchPoints || 0);
+
+  /** Copie (geste de la personne obligatoire), puis `then` : réussie ou non, on continue. */
+  function copy(value, then) {
+    function done(ok) {
+      if (ok) show('copied', true);
+      if (then) then();
     }
-  })();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(function () { done(true); }, function () { done(fallbackCopy(value)); });
+        return;
+      }
+    } catch (e) { /* on essaie autrement */ }
+    done(fallbackCopy(value));
+  }
+  function fallbackCopy(value) {
+    var ta = document.createElement('textarea');
+    ta.value = value;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, value.length);
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  if (q.referral) {
+    // Parrainage : on ne tente pas d’ouvrir l’app tout seul (sans Goldo, Safari afficherait une erreur) ;
+    // « Installer Goldo » copie le code puis mène à l’App Store : à l’inscription, « Coller » le remplit.
+    var shown = GOLDO_I.formatReferral(q.referral);
+    text('title', 'Un ami t’invite sur Goldo');
+    text('lead', 'Goldo est le carnet de ton cheval : soins, séances, vaccins. Avec ce code, vous gagnez chacun 150 fers et une malle d’or quand tu auras noté ton cheval 3 jours.');
+    text('code', shown);
+    show('codeBlock', true);
+    if (platform === 'android') {
+      show('androidMsg', true);
+      show('buttons', false);
+      return;
+    }
+    $('install').addEventListener('click', function (ev) {
+      ev.preventDefault();
+      var href = $('install').getAttribute('href');
+      copy(shown, function () { window.location.href = href; });
+    });
+    $('copy').addEventListener('click', function () { copy(shown); });
+    show('copyLine', true);
+    if (platform === 'ios') {
+      $('open').setAttribute('href', GOLDO_I.referralLink(q.referral));
+      show('open', true);
+      text('hint', 'Le code est copié en installant : à l’inscription, à l’étape « Quelqu’un t’a invité ? », touche « Coller ».');
+      show('hint', true);
+    } else {
+      show('desktopMsg', true);
+    }
+  } else if (q.team) {
+    // Équipe (lien et QR existants) : comportement d’avant, l’app est ouverte si elle est installée.
+    text('lead', 'Si tu as déjà l’app, elle va s’ouvrir. Sinon, installe Goldo puis entre ce code :');
+    text('code', GOLDO_I.formatTeam(q.team));
+    show('codeBlock', true);
+    var deep = GOLDO_I.joinLink(q.team);
+    $('open').setAttribute('href', deep);
+    text('open', 'Ouvrir dans Goldo');
+    show('open', true);
+    setTimeout(function () { window.location = deep; }, 50);
+  }
+})();
 </script>
 </body>
 </html>

@@ -104,7 +104,9 @@ var GOLDO_I = (function () {
   function show(id, on) { $(id).hidden = !on; }
   function text(id, value) { $(id).textContent = value; }
 
-  var q = GOLDO_I.readQuery(location.search);
+  // Adresses courtes (goldo.pages.dev) : /p/CODE = parrainage, /c/CODE = équipe ; sinon ?r= / ?c= comme avant.
+  var short = /^\/(p|c)\/([A-Za-z0-9-]{4,16})\/?$/.exec(location.pathname || '');
+  var q = GOLDO_I.readQuery(short ? ('?' + (short[1] === 'p' ? 'r' : 'c') + '=' + short[2]) : location.search);
   var platform = GOLDO_I.platformOf(navigator.userAgent, navigator.maxTouchPoints || 0);
 
   /** Copie (geste de la personne obligatoire), puis `then` : réussie ou non, on continue. */

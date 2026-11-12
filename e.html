@@ -122,7 +122,9 @@ var GOLDO_E = (function () {
   function show(id, on) { $(id).hidden = !on; }
   function text(id, value) { $(id).textContent = value; }
 
-  var q = GOLDO_E.readQuery(location.search);
+  // Adresse courte (goldo.pages.dev) : /e/CODE = code d'écurie ; sinon ?c= / ?n= comme avant.
+  var short = /^\/e\/([A-Za-z0-9-]{4,16})\/?$/.exec(location.pathname || '');
+  var q = GOLDO_E.readQuery(short ? ('?c=' + short[1]) : location.search);
   var platform = GOLDO_E.platformOf(navigator.userAgent, navigator.maxTouchPoints || 0);
 
   if (q.code) {
